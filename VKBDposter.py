@@ -1,7 +1,10 @@
 import requests
-import time
-import datetime
-import json
+#import time
+#import datetime
+
+import re
+from datetime import datetime, timedelta
+
 import random
 
 from config_reader import config
@@ -10,8 +13,8 @@ class VKBDposter:
     """Поздравлятель"""
 
 
-    def __init__(self):
-        """Инициатор"""
+    def __init__(self, UniDate, BD, date_start, date_end):
+        """Конструктор"""
 
         # Получение значений токенов и группы, а также указание версии API
         TOKEN = config.VK_TOKEN.get_secret_value()
@@ -20,22 +23,23 @@ class VKBDposter:
         V = 5.199
 
         # Запуск процесса поздравления
-        Starter = self.Poster(TOKEN = TOKEN,OWNER_ID = OWNER_ID, GROUP_ID = GROUP_ID, V = V)
+        Starter = self.Poster(TOKEN = TOKEN,OWNER_ID = OWNER_ID, GROUP_ID = GROUP_ID, V = V, UniDate = UniDate, BD = BD, date_start = date_start, date_end = date_end)
 
 
-    def get_unix_timestamp_plus_one_hour(self):
-        """Возвращает текущее время + 1 час в виде Unix timestamp."""
-
-        # Получаем текущее время
-        now = datetime.datetime.now()
-
-        # Добавляем 1 час
-        future_time = now + datetime.timedelta(hours=1)
-
-        # Преобразуем в Unix timestamp (количество секунд с начала эпохи)
-        unix_timestamp = int(time.mktime(future_time.timetuple()))
-
-        return unix_timestamp
+    # def get_unix_timestamp_plus_one_hour(self):
+    #     """Возвращает текущее время + 1 час в виде Unix timestamp."""
+    #
+    #     # Получаем текущее время
+    #     now = datetime.datetime.now()
+    #
+    #
+    #     # Добавляем 1 час
+    #     future_time = now + datetime.timedelta(hours=1)
+    #
+    #     # Преобразуем в Unix timestamp (количество секунд с начала эпохи)
+    #     unix_timestamp = int(time.mktime(future_time.timetuple()))
+    #     print(unix_timestamp)
+    #     return unix_timestamp
 
     #Если придётся грузить из внешнего источника фотки, то нужно доделать эту функцию. Тут пример: https://gist.github.com/trolleway/f3b489f025bab923b8a5e1c9600e3b71
     #Тут метод и описание от вк: https://dev.vk.com/ru/api/upload/wall-photo
@@ -103,17 +107,19 @@ class VKBDposter:
 
         return Random_Photo
 
-    def Get_BD(self, TOKEN, GROUP_ID, V):
+    def Get_BD(self, TOKEN, GROUP_ID, V, BD, date_start, date_end):
         """Получение списка именинников, форматирование сообщения в соответствии со списком"""
 
         # Получаем полный список пользователей группы
         BDs = requests.get('https://api.vk.com/method/groups.getMembers?',
-                              params={
-                                  'access_token': TOKEN,
-                                  'group_id': GROUP_ID,
-                                  'fields': 'bdate',
-                                  'v': V
-                              }).json()
+                           params={
+                               'access_token': TOKEN,
+                               'group_id': GROUP_ID,
+                               'fields': 'bdate',
+                               'v': V
+                           }).json()
+
+
 
         # Срезаем лишнее из ответа от ВК
         BDsItems = BDs['response']['items']
@@ -124,39 +130,80 @@ class VKBDposter:
 
         # Перебор для получения только интереусющих данных
         for item in BDsItems:
+            if item['bdate'][:-5] == BD:
+                BDsItem = {
+                    'n': n,
+                    'id': item['id'],
+                    'bdate': item['bdate'],
+                    'name': item['first_name'],
+                    'surname': item['last_name']
+                }
 
-            BDsItem = {
-                'n': n,
-                'id': item['id'],
-                'bdate': item['bdate'],
-                'name': item['first_name'],
-                'surname': item['last_name']
-            }
+                n += 1
 
-            n += 1
-
-            People_Dict.append(BDsItem)
+                People_Dict.append(BDsItem)
 
         # Пустая строка для части сообщения с перечислением людей
-        Message_People_Items = ""
+        people = ""
 
         # Часть сообщения с перечислением людей
         for hooman in People_Dict:
             # Точка для последнего в перечислении
             if hooman['n'] == n-1:
                 Message_People_Item = f"*id{hooman['id']} ({hooman['name']} {hooman['surname']}). "
-                Message_People_Items += Message_People_Item
+                people += Message_People_Item
             else:
                 Message_People_Item = f"*id{hooman['id']} ({hooman['name']} {hooman['surname']}), "
-                Message_People_Items += Message_People_Item
+                people += Message_People_Item
+
+        #Задаём параметры даты начала скидки и даты окончания скидки
+        if date_start != None:
+            pass
+        #Если дата начала пустая
+        else:
+            date_starter = datetime.now()
+            date_start = date_starter.strftime("%d.%m")
+            date_ender = date_starter + timedelta(days=7)
+            date_end = date_ender.strftime("%d.%m")
+            print(date_start)
+
+        #Аргументы для подстановки в текст из текстового файла
+        arguments = {
+            "people": people,
+            "date_start": date_start,
+            "date_end": date_end
+        }
 
         # Само сообщение.
-        Message = f"Дорогие {Message_People_Items} С ДР. От всей души, душевно в душу. Аллюминь."
+        if People_Dict[0:]:
+            print(People_Dict)
+            with open("hint.txt", 'r', encoding='utf8') as Text_msg:
+                Messager = Text_msg.read()
+                #Функция подстановки аргументов
+                def argument_replacement(match):
+                    arg_name = match.group(1)
+                    if arg_name in arguments:
+                        return str(arguments[arg_name])
+                    else:
+                        raise ValueError(f"Аргумент '{arg_name}' не найден в словаре аргументов")
+
+                try:
+                    # Проводим замену с помощью re.sub()
+                    Message = re.sub(r'\{([^}]+)\}', argument_replacement, Messager)
+                    return Message
+                except ValueError as e:
+                    raise ValueError(f"Ошибка подстановки аргументов: {e}")
+
+
+            #Message = f"Дорогие {people} С ДР. От всей души, душевно в душу. Аллюминь."
+        else:
+            print('Некого поздравлять :С')
+            raise
 
         return Message
 
 
-    def Poster(self, TOKEN, OWNER_ID, GROUP_ID, V):
+    def Poster(self, TOKEN, OWNER_ID, GROUP_ID, V, UniDate, BD, date_start, date_end):
         """Функция отправки поста в группу"""
 
         # Получение альбома
@@ -166,10 +213,13 @@ class VKBDposter:
         ATTACHMENTS = self.RandPhoto(TOKEN = TOKEN, V = V, Album_Data = Album_Data)
 
         # Генерация сообщения
-        MESSAGE = self.Get_BD(TOKEN = TOKEN, V = V, GROUP_ID = GROUP_ID)
+        MESSAGE = self.Get_BD(TOKEN = TOKEN, V = V, GROUP_ID = GROUP_ID, BD = BD, date_start= date_start, date_end = date_end)
 
         # Генерация даты отложенного поста
-        PUBLISHING_DATE = self.get_unix_timestamp_plus_one_hour()
+        if UniDate:
+            PUBLISHING_DATE = UniDate #self.get_unix_timestamp_plus_one_hour()
+        else:
+            PUBLISHING_DATE = ''
 
         # Часть функции для загрузки из внешнего источника
         #Upload_Link = Photo_loader(TOKEN = TOKEN, GROUP_ID = GROUP_ID, V = V)
@@ -190,4 +240,4 @@ class VKBDposter:
 
 if __name__ == "__main__":
 
-    Poster = VKBDposter()
+    Poster = VKBDposter(UniDate=None, BD = '21.12', date_start= None, date_end=None)

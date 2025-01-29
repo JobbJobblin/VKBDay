@@ -1,17 +1,11 @@
 import requests
-#import time
-#import datetime
-
 import re
-from datetime import datetime, timedelta
-
 import random
-
+from datetime import datetime, timedelta
 from config_reader import config
 
 class VKBDposter:
     """Поздравлятель"""
-
 
     def __init__(self, UniDate, BD, date_start, date_end):
         """Конструктор"""
@@ -24,22 +18,6 @@ class VKBDposter:
 
         # Запуск процесса поздравления
         Starter = self.Poster(TOKEN = TOKEN,OWNER_ID = OWNER_ID, GROUP_ID = GROUP_ID, V = V, UniDate = UniDate, BD = BD, date_start = date_start, date_end = date_end)
-
-
-    # def get_unix_timestamp_plus_one_hour(self):
-    #     """Возвращает текущее время + 1 час в виде Unix timestamp."""
-    #
-    #     # Получаем текущее время
-    #     now = datetime.datetime.now()
-    #
-    #
-    #     # Добавляем 1 час
-    #     future_time = now + datetime.timedelta(hours=1)
-    #
-    #     # Преобразуем в Unix timestamp (количество секунд с начала эпохи)
-    #     unix_timestamp = int(time.mktime(future_time.timetuple()))
-    #     print(unix_timestamp)
-    #     return unix_timestamp
 
     #Если придётся грузить из внешнего источника фотки, то нужно доделать эту функцию. Тут пример: https://gist.github.com/trolleway/f3b489f025bab923b8a5e1c9600e3b71
     #Тут метод и описание от вк: https://dev.vk.com/ru/api/upload/wall-photo
@@ -68,7 +46,7 @@ class VKBDposter:
                              }).json()
 
         # Поиск альбома с конкретным названием
-        AlbumBDay = [item for item in Album['response']['items'] if item.get('title') == 'bday']
+        AlbumBDay = [item for item in Album['response']['items'] if item.get('title') == 'ДеньРождения']
 
         # Сохранение только owner_id и id
         AlbumrespDict = [{'owner_id': item.get('owner_id'), 'id': item.get('id')} for item in AlbumBDay]
@@ -110,27 +88,36 @@ class VKBDposter:
     def Get_BD(self, TOKEN, GROUP_ID, V, BD, date_start, date_end):
         """Получение списка именинников, форматирование сообщения в соответствии со списком"""
 
-        # Получаем полный список пользователей группы
-        BDs = requests.get('https://api.vk.com/method/groups.getMembers?',
-                           params={
-                               'access_token': TOKEN,
-                               'group_id': GROUP_ID,
-                               'fields': 'bdate',
-                               'v': V
-                           }).json()
+        #Обработка пустого значения для значения по умолчанию
+        if BD == None:
+            BD = datetime.now().strftime("%#d.%#m")
+            print(str(BD))
 
-
-
-        # Срезаем лишнее из ответа от ВК
-        BDsItems = BDs['response']['items']
+        offset = 0
+        count = 1001 #Должен быть задан до перебора
+        BDsItems = []
+        while offset < count:
+            # Получаем полный список пользователей группы
+            BDs = requests.get('https://api.vk.com/method/groups.getMembers?',
+                               params={
+                                   'access_token': TOKEN,
+                                   'group_id': GROUP_ID,
+                                   'offset': offset,
+                                   'fields': 'bdate',
+                                   'v': V
+                               }).json()
+            count = BDs['response']['count']
+            offset += 1000
+            # Срезаем лишнее из ответа от ВК
+            BDsItems.extend(BDs['response']['items'])
 
         # Пустой словарь для людей
         People_Dict = []
-        n = 1
-
+        n = 1 #Счётчик
         # Перебор для получения только интереусющих данных
         for item in BDsItems:
-            if item['bdate'][:-5] == BD:
+            #Если у пользователя полная дата: 1.1.1111
+            if 'bdate' in item and item['bdate'][:-5] == BD:
                 BDsItem = {
                     'n': n,
                     'id': item['id'],
@@ -140,7 +127,18 @@ class VKBDposter:
                 }
 
                 n += 1
+                People_Dict.append(BDsItem)
+            #Если у пользователя скрыт год: 1.1
+            elif 'bdate' in item and item['bdate'] == str(BD):
+                BDsItem = {
+                    'n': n,
+                    'id': item['id'],
+                    'bdate': item['bdate'],
+                    'name': item['first_name'],
+                    'surname': item['last_name']
+                }
 
+                n += 1
                 People_Dict.append(BDsItem)
 
         # Пустая строка для части сообщения с перечислением людей
@@ -150,10 +148,10 @@ class VKBDposter:
         for hooman in People_Dict:
             # Точка для последнего в перечислении
             if hooman['n'] == n-1:
-                Message_People_Item = f"*id{hooman['id']} ({hooman['name']} {hooman['surname']}). "
+                Message_People_Item = f"*ffid{hooman['id']} ({hooman['name']} {hooman['surname']}). "
                 people += Message_People_Item
             else:
-                Message_People_Item = f"*id{hooman['id']} ({hooman['name']} {hooman['surname']}), "
+                Message_People_Item = f"*ffid{hooman['id']} ({hooman['name']} {hooman['surname']}), "
                 people += Message_People_Item
 
         #Задаём параметры даты начала скидки и даты окончания скидки
@@ -165,7 +163,6 @@ class VKBDposter:
             date_start = date_starter.strftime("%d.%m")
             date_ender = date_starter + timedelta(days=7)
             date_end = date_ender.strftime("%d.%m")
-            print(date_start)
 
         #Аргументы для подстановки в текст из текстового файла
         arguments = {
@@ -194,14 +191,11 @@ class VKBDposter:
                 except ValueError as e:
                     raise ValueError(f"Ошибка подстановки аргументов: {e}")
 
-
-            #Message = f"Дорогие {people} С ДР. От всей души, душевно в душу. Аллюминь."
         else:
-            print('Некого поздравлять :С')
-            raise
+            #Возвращаем ошибку в UI пользователю
+            raise ValueError("Некого поздравлять  :С")
 
         return Message
-
 
     def Poster(self, TOKEN, OWNER_ID, GROUP_ID, V, UniDate, BD, date_start, date_end):
         """Функция отправки поста в группу"""
@@ -240,4 +234,4 @@ class VKBDposter:
 
 if __name__ == "__main__":
 
-    Poster = VKBDposter(UniDate=None, BD = '21.12', date_start= None, date_end=None)
+    Poster = VKBDposter(UniDate=None, BD = None, date_start= None, date_end=None)

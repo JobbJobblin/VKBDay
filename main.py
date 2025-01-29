@@ -1,41 +1,28 @@
-# Доделать:
-# 1) Стандартная дата и время публикации
-# 2) Передача аргументов в вкбдпостер
-# 3) Функционал "по умолчанию".
-# 4) Добавить котика
-#
-#
-#
-#
-#
-#
-#
-#
-#
 import sys
+from typing import Union
 
 import datetime
 import time
 
 from VKBDposter import VKBDposter
+from pathlib import Path #Если захочется менять картинку
 
 from PyQt6.QtWidgets import (QApplication, QWidget, QLabel, QVBoxLayout,
                              QHBoxLayout, QPushButton, QCalendarWidget,
                              QDialog, QTimeEdit, QLineEdit, QCheckBox)
-from PyQt6.QtCore import QDate, QTime, Qt, QDateTime, QSize, QLocale, QCalendar
-from PyQt6.QtGui import QIntValidator
+from PyQt6.QtCore import QDate, QTime, Qt, QDateTime
+from PyQt6.QtGui import QPixmap
 
-class CustomDateTimePicker(QWidget):
+class DateTimePicker(QWidget):
+    """Класс с логикой ui"""
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Выбор Даты и Времени")
-        self.setFixedSize(500, 500)
+        self.setWindowTitle("Добромёт")
 
         layout = QVBoxLayout()
 
-        self.selected_date = QDate.currentDate()  # задаем значение по умолчанию
+        self.selected_date = QDate.currentDate()  # значение по умолчанию
         self.selected_time = QTime.currentTime()   # значение по умолчанию
-
 
         #Тоггл на отложенный пост
         self.Postpone_toggle = QCheckBox("Отложенный пост")
@@ -43,6 +30,7 @@ class CustomDateTimePicker(QWidget):
         self.Postpone_toggle.stateChanged.connect(self.Postponed_Toggle)
         layout.addWidget(self.Postpone_toggle)
 
+        # Значения по умолчанию
         self.date_start = self.selected_date.toString("dd-MM-yyyy") if not self.Postpone_toggle.isChecked() else self.date_end
         self.date_end = self.selected_date.addDays(7).toString("dd-MM-yyyy") if not self.Postpone_toggle.isChecked() else self.date_end
         self.Post_date = QDateTime(self.selected_date, self.selected_time).toString(("dd-MM-yyyy"))
@@ -98,19 +86,19 @@ class CustomDateTimePicker(QWidget):
         layout.addLayout(time_layout)
 
         #Выбор даты начала скидки
-        self.date_label = QLabel("Выберите дату начала скидки:")
-        layout.addWidget(self.date_label)
+        self.Sale_date_label = QLabel("Выберите дату начала скидки:")
+        layout.addWidget(self.Sale_date_label)
 
         # Кнопка для выбора даты
-        self.date_button = QPushButton("Выбрать дату")
-        self.date_button.clicked.connect(lambda: self.show_calendar(self.date_display))
-        layout.addWidget(self.date_button)
-        self.date_display = QLineEdit()
+        self.Sale_date_button = QPushButton("Выбрать дату")
+        self.Sale_date_button.clicked.connect(lambda: self.show_calendar(self.Sale_date_display))
+        layout.addWidget(self.Sale_date_button)
+        self.Sale_date_display = QLineEdit()
         self.end_date_display = QLineEdit()
-        self.date_display.setReadOnly(True)
-        self.date_display.setText(self.date_start)
+        self.Sale_date_display.setReadOnly(True)
+        self.Sale_date_display.setText(self.date_start)
         self.end_date_display.setText(self.date_end)
-        layout.addWidget(self.date_display)
+        layout.addWidget(self.Sale_date_display)
 
         #Кнопка подтверждения выбора
         self.confirm_button = QPushButton('Подтвердить')
@@ -129,12 +117,14 @@ class CustomDateTimePicker(QWidget):
 
         self.setLayout(layout)
 
-        self.update_result_label()
+        self.update_result_label()# Задание значений по умолчанию
 
+        #Кнопка запуска
         self.launch_button = QPushButton('Причинить добро')
         self.launch_button.clicked.connect(self.launch_poster)
         layout.addWidget(self.launch_button)
-        self.hider = self.Postponed_Toggle()
+
+        self.Postponed_Toggle() #Скрытие отложенного поста
 
     def Validate_day_input(self,text):
         """Функция-ограничитель для дней 1<x<31"""
@@ -176,9 +166,9 @@ class CustomDateTimePicker(QWidget):
             self.BD_day_label.show()
             self.BD_month_label.show()
 
-            self.date_label.show()
-            self.date_button.show()
-            self.date_display.show()
+            self.Sale_date_label.show()
+            self.Sale_date_button.show()
+            self.Sale_date_display.show()
 
             self.Post_date_label.show()
             self.Post_date_button.show()
@@ -197,9 +187,9 @@ class CustomDateTimePicker(QWidget):
             self.BD_day_label.hide()
             self.BD_month_label.hide()
 
-            self.date_label.hide()
-            self.date_button.hide()
-            self.date_display.hide()
+            self.Sale_date_label.hide()
+            self.Sale_date_button.hide()
+            self.Sale_date_display.hide()
 
 
             self.Post_date_label.hide()
@@ -215,10 +205,8 @@ class CustomDateTimePicker(QWidget):
             self.result_label.hide()
             self.End_result_label.hide()
 
-    def show_calendar(self, Caller):
-        """
-        Отображает диалог с QCalendarWidget для выбора даты.
-        """
+    def show_calendar(self, Caller: QLineEdit):
+        """Отображает диалог с QCalendarWidget для выбора даты."""
         dialog = QDialog(self)
         dialog.setWindowTitle("Выбрать дату")
         dialog.setModal(True)
@@ -230,14 +218,12 @@ class CustomDateTimePicker(QWidget):
         def select_date():
           self.selected_date = calendar.selectedDate()
           if Caller == self.Post_date_display:
-            Caller.setText(self.selected_date.toString("dd-MM-yyyy")) # меняем текст в поле ввода
+            Caller.setText(self.selected_date.toString("dd.MM.yyyy")) # меняем текст в поле ввода
           else:
-            Caller.setText(self.selected_date.toString("dd-MM-yyyy"))  # меняем текст в поле ввода
-            self.end_date_display.setText(self.selected_date.addDays(7).toString("dd-MM-yyyy"))
-
+            Caller.setText(self.selected_date.toString("dd.MM.yyyy"))  # меняем текст в поле ввода
+            self.end_date_display.setText(self.selected_date.addDays(7).toString("dd.MM.yyyy"))
 
           dialog.close()
-          #self.update_result_label()
 
         button_ok = QPushButton("ОК", dialog)
         button_ok.clicked.connect(select_date)
@@ -256,44 +242,86 @@ class CustomDateTimePicker(QWidget):
 
     def update_result_label(self):
         """Обновляем текст с выбранной датой и временем"""
-        self.date_start = self.date_display.text() if self.Postpone_toggle.isChecked() else self.date_start
-        self.date_end = self.end_date_display.text() if self.Postpone_toggle.isChecked() else self.date_end
-        self.Post_date = self.Post_date_display.text() if self.Postpone_toggle.isChecked() else self.Post_date
-        self.Post_date = f"{self.Post_date} {self.time_edit.text()}"
-        self.BDdate = f"{self.BD_day_label.text()}.{self.BD_month_label.text()}"
+        try:
+            #Обновление данных полей
+            self.date_start = self.Sale_date_display.text() if self.Postpone_toggle.isChecked() else self.date_start
+            self.date_end = self.end_date_display.text() if self.Postpone_toggle.isChecked() else self.date_end
+            self.Post_date = self.Post_date_display.text() if self.Postpone_toggle.isChecked() else self.Post_date
+            self.Post_date = f"{self.Post_date} {self.time_edit.text()}"
+            self.BDdate = f"{self.BD_day_label.text()}.{self.BD_month_label.text()}"
 
-        if self.Postpone_toggle.isChecked():
-            date_format = '%d-%m-%Y %H:%M'
-            self.UniDate = datetime.datetime.strptime(self.Post_date, date_format)
-            self.UniDate = int(time.mktime(self.UniDate.timetuple()))
+            if self.Postpone_toggle.isChecked():
+                date_format = '%d.%m.%Y %H:%M'
+                date_format_disc = '%d.%m.%Y'
+                #Проверки установленных дат на "будущее"
+                Chron = datetime.datetime.now()
+                self.UniDate = datetime.datetime.strptime(self.Post_date, date_format)
+                self.Discount = datetime.datetime.strptime(self.date_start, date_format_disc)
+                if self.UniDate < Chron:
+                    raise Exception('Дата публикации отложенного поста не может быть раньше текущей даты (и времени)')
+                if self.Discount < Chron:
+                    raise Exception('Дата начала скидки не может быть раньше текущей даты')
+                #Перевод времени в unix (для вк)
+                self.UniDate = int(time.mktime(self.UniDate.timetuple()))
 
-        self.Bresult_label.setText(f"Выбранная дата рождения: {self.BDdate}")
-        self.Post_result_label.setText(f"Выбранная дата публикации: {self.Post_date}")
-        self.result_label.setText(f"Выбранная дата начала скидки: {self.date_start}")
-        self.End_result_label.setText(f"Выбранная дата окончания скидки: {self.date_end}")
+            #Обновление самих строк с текстом
+            self.Bresult_label.setText(f"Выбранная дата рождения: {self.BDdate}")
+            self.Post_result_label.setText(f"Выбранная дата публикации: {self.Post_date}")
+            self.result_label.setText(f"Выбранная дата начала скидки: {self.date_start}")
+            self.End_result_label.setText(f"Выбранная дата окончания скидки: {self.date_end}")
 
-        print(self.UniDate)
-        return self.UniDate, self.BDdate, self.date_start, self.date_end
+            return self.UniDate, self.BDdate, self.date_start, self.date_end
+        except Exception as e:
+            #Обработка ошибок
+            self.Errorist("Ошибкаааааа!!!11", "erricon.png", str(e))
+
+    def Errorist(self, Title: str, Icon_path: Union[str, Path], e: Exception):
+        """Функция поп-апов (ошибки и окно "успеха")"""
+        dialog = QDialog()
+        dialog.setWindowTitle(Title)
+
+        icon_label = QLabel()
+        pixmap = QPixmap(Icon_path) #Указан тип строки или пути, если захочется потом поменять иконку или добавить возможность пользователю кастомизировать её
+        icon_label.setPixmap(pixmap.scaled(100, 100, Qt.AspectRatioMode.KeepAspectRatio))
+
+        text_label = QLabel(e)
+        text_label.setWordWrap(True)
+
+        ok_button = QPushButton("OK")
+        ok_button.clicked.connect(dialog.accept)
+
+        hbox = QHBoxLayout()
+        hbox.addWidget(icon_label, alignment=Qt.AlignmentFlag.AlignLeft)
+        hbox.addWidget(text_label, alignment=Qt.AlignmentFlag.AlignLeft)
+
+        vbox = QVBoxLayout()
+        vbox.addLayout(hbox)
+        vbox.addWidget(ok_button, alignment=Qt.AlignmentFlag.AlignRight)
+
+        dialog.setLayout(vbox)
+        dialog.exec()
+        return dialog
 
     def launch_poster(self):
-        # print('results:')
-        # print(self.UniDate)
-        # print(self.BDdate)
-        # print(self.date_start)
-        # print(self.date_end)
+        """Функция запуска поста"""
         if self.Postpone_toggle.isChecked():
             try:
                 VKBDposter(UniDate=self.UniDate, BD = self.BDdate, date_start=self.date_start, date_end=self.date_end)
+                #Вызов окна успеха операции
+                self.Errorist("Ура!", "success.png", "Распределение добра завершено")
             except Exception as e:
-                print(e)
+                self.Errorist("Ошибкаааааа!!!11", "erricon.png", str(e))
         else:
+            #Создание поста со стандартными значениями
             try:
                 VKBDposter(UniDate=None, BD=None, date_start=None, date_end=None)
+                # Вызов окна успеха операции
+                self.Errorist("Ура!", "success.png", "Распределение добра завершено")
             except Exception as e:
-                print(e)
+                self.Errorist("Ошибкаааааа!!!11", "erricon.png", str(e))
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
-    window = CustomDateTimePicker()
+    window = DateTimePicker()
     window.show()
     sys.exit(app.exec())

@@ -12,9 +12,6 @@ class Settings(BaseSettings):
     VK_TOKEN: SecretStr
     GROUP_ID_MINUS: SecretStr
     GROUP_ID: SecretStr
-    TG_TOKEN: SecretStr
-    CHANNEL_ID: SecretStr
-    MSG_THREAD: SecretStr
 
     model_config = SettingsConfigDict(
         extra= "allow",
